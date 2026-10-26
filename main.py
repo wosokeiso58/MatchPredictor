@@ -11,7 +11,8 @@ home = home.rename(columns={
 })
 
 home["Points"] = home["FTR"].map({"H": 3, "D": 1, "A": 0})
-
+home["IsHome"] = True
+home["MatchID"] = home.index
 
 away = df[["Date", "HomeTeam", "AwayTeam", "FTR", "FTHG", "FTAG"]].copy()
 
@@ -23,7 +24,8 @@ away = away.rename(columns={
 })
 
 away["Points"] = away["FTR"].map({"A": 3, "D": 1, "H": 0})
-
+away["IsHome"] = False
+away["MatchID"] = away.index
 
 matches = pd.concat([home, away], ignore_index=True)
 
@@ -39,6 +41,15 @@ matches["AvgGoalsScored"] = (
     matches.groupby("Team")["GoalsScored"]
     .transform(lambda x: x.shift(1).rolling(5).mean())
 )
-print(matches[matches["Team"] == "Arsenal"][
-    ["Date", "GoalsScored", "AvgGoalsScored","Points","FormPoints"]
-])
+matches["AvgGoalsConceded"] = (
+    matches.groupby("Team")["GoalsConceded"]
+    .transform(lambda x: x.shift(1).rolling(5).mean())
+)
+home_rows = matches[matches["IsHome"]]
+away_rows = matches[~matches["IsHome"]]
+merged = home_rows.merge(away_rows, on="MatchID", suffixes=("_Home", "_Away"))
+merged["FormDiff"] = merged["FormPoints_Home"] - merged["FormPoints_Away"]
+merged.dropna(subset=["FormDiff"], inplace=True)
+strong = merged[merged["FormDiff"] < -5]
+print(strong["FTR_Away"].value_counts(normalize=True))
+print(len(strong))
