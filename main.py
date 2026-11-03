@@ -1,12 +1,20 @@
 import pandas as pd
+from sklearn.linear_model import LogisticRegression
 
-def build_match_table(path):
-    df = pd.read_csv(path)
-    raw = df["Date"]
-    if raw.str.contains("-").all():
-        df["Date"] = pd.to_datetime(raw, format="%Y-%m-%d")
-    else:
-        df["Date"] = pd.to_datetime(raw, format="%d/%m/%Y")
+
+def build_match_table(paths):
+    frames = []
+    for path in paths:
+        df = pd.read_csv(path)
+        raw = df["Date"]
+        if raw.str.contains("-").all():
+            df["Date"] = pd.to_datetime(raw, format="%Y-%m-%d")
+        else:
+            df["Date"] = pd.to_datetime(raw, format="%d/%m/%Y")
+        frames.append(df)
+
+    df = pd.concat(frames, ignore_index=True).copy()
+    df["MatchID"] = df.index
 
     home = df[["Date", "HomeTeam", "AwayTeam", "FTR", "FTHG", "FTAG"]].copy()
 
@@ -55,6 +63,7 @@ def build_match_table(path):
 
     home_rows = matches[matches["IsHome"]]
     away_rows = matches[~matches["IsHome"]]
+
     merged = home_rows.merge(away_rows, on="MatchID", suffixes=("_Home", "_Away"))
     merged["FormDiff"] = merged["FormPoints_Home"] - merged["FormPoints_Away"]
     merged = merged[
@@ -68,14 +77,33 @@ def build_match_table(path):
 
     return merged.reset_index(drop=True)
 
-result = build_match_table("2425.csv")
+result = build_match_table(["2021.csv","2122.csv","2223.csv","2324.csv", "2425.csv", "2526.csv"])
+result = result[result["Date"] >= "2021-07-01"].copy()
+result = result.sort_values("Date").reset_index(drop=True)
 print(len(result))
-print(result.columns)
-print(result.head())
-print(result["Date"].dtype)
+train = result[result["Date"] < "2026-01-01"].copy()
+test = result[result["Date"] >= "2026-01-01"].copy()
+print(len(test))
 
-result1 = build_match_table("2526.csv")
-print(len(result1))
-print(result1.columns)
-print(result1.head())
-print(result1["Date"].dtype)
+features = ["FormPoints_Home", "FormPoints_Away", "AvgGoalsScored_Home", "AvgGoalsScored_Away",
+            "AvgGoalsConceded_Home", "AvgGoalsConceded_Away", "FormDiff"]
+
+X_train = train[features]
+y_train = train["FTR"]
+X_test = test[features]
+y_test = test["FTR"]
+
+print(X_train.shape, X_test.shape)
+
+
+model = LogisticRegression(max_iter=1000)
+model.fit(X_train, y_train)
+predictions = model.predict(X_test)
+
+accuracy = (predictions == y_test).mean()
+print(accuracy)
+print(pd.Series(predictions).value_counts())
+
+
+
+
